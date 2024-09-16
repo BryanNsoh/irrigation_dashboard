@@ -1,0 +1,52 @@
+# Virtual Environment
+venv/
+env/
+.venv/
+.env/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Environment variables
+.env
+
+# IDE specific files
+.vscode/
+.idea/
+
+# Compiled Python files
+*.pyc
+
+# Logs
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Dependency directories
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+node_modules/
+
