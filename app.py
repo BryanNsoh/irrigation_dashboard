@@ -106,6 +106,35 @@ def map_irrigation_recommendation(recommendation):
             return 0.0
     return 0.0  # Default fallback
 
+def find_nearest_data(dataset, table, selected_start, selected_end, client, required_column, max_days=30):
+    """
+    Finds the nearest date range with available data by shifting the selected range
+    forward and backward day by day, up to a maximum number of days.
+    Additionally, ensures that the required_column has at least one non-null value.
+    
+    Returns:
+        new_start (datetime): New start date with available data.
+        new_end (datetime): New end date with available data.
+        df (pd.DataFrame): DataFrame containing the fetched data.
+        direction (str): 'before' or 'after' indicating the direction of the shift.
+    """
+    for delta in range(1, max_days + 1):
+        # Check before the selected range
+        new_start_before = selected_start - timedelta(days=delta)
+        new_end_before = selected_end - timedelta(days=delta)
+        df_before = fetch_data(dataset, table, new_start_before.strftime('%Y-%m-%d'), new_end_before.strftime('%Y-%m-%d'))
+        if not df_before.empty and required_column in df_before.columns and df_before[required_column].notnull().any():
+            return new_start_before, new_end_before, df_before, 'before'
+
+        # Check after the selected range
+        new_start_after = selected_start + timedelta(days=delta)
+        new_end_after = selected_end + timedelta(days=delta)
+        df_after = fetch_data(dataset, table, new_start_after.strftime('%Y-%m-%d'), new_end_after.strftime('%Y-%m-%d'))
+        if not df_after.empty and required_column in df_after.columns and df_after[required_column].notnull().any():
+            return new_start_after, new_end_after, df_after, 'after'
+
+    return None, None, None, None
+
 # -------------------- Streamlit App --------------------
 
 def main():
@@ -134,7 +163,7 @@ def main():
         unsafe_allow_html=True,
     )
 
-    st.title("🌾 **Irrigation Management Dashboard** 🌾")
+    st.title("🌾 **CROP2CLOUD Platform** 🌾")
 
     # Sidebar for user inputs
     with st.sidebar:
@@ -169,9 +198,35 @@ def main():
     with st.spinner("🔍 Fetching data from BigQuery..."):
         df = fetch_data(dataset, table, start_date_str, end_date_str)
 
-    if df.empty:
-        st.warning("⚠️ No data available for the selected plot and date range.")
-        st.stop()
+    # Handle empty data by finding the nearest available data range
+    if df.empty or ('Solar_2m_Avg' not in df.columns) or df['Solar_2m_Avg'].isnull().all():
+        # Define the required column for non-null data
+        required_column = 'Solar_2m_Avg'
+        new_start, new_end, df_new, direction = find_nearest_data(
+            dataset, table, start_date, end_date, client, required_column
+        )
+        if df_new is not None:
+            if direction == 'before':
+                st.info(
+                    f"No data found for the selected date range with valid **Solar Radiation**. "
+                    f"Showing data from **{new_start.strftime('%Y-%m-%d')}** to **{new_end.strftime('%Y-%m-%d')}** (shifted earlier)."
+                )
+            else:
+                st.info(
+                    f"No data found for the selected date range with valid **Solar Radiation**. "
+                    f"Showing data from **{new_start.strftime('%Y-%m-%d')}** to **{new_end.strftime('%Y-%m-%d')}** (shifted later)."
+                )
+            start_date = new_start
+            end_date = new_end
+            start_date_str = start_date.strftime('%Y-%m-%d')
+            end_date_str = end_date.strftime('%Y-%m-%d')
+            df = df_new
+        else:
+            st.warning(
+                "⚠️ No data available for the selected plot and date range, even after searching nearby dates "
+                "with valid **Solar Radiation** data."
+            )
+            st.stop()
 
     # Parse timestamps
     df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'])
@@ -197,24 +252,84 @@ def main():
             available_weather = [param for param in weather_params.keys() if param in df.columns]
             if available_weather:
                 fig = go.Figure()
-                for param in available_weather:
+
+                # Add Solar Radiation trace (Primary Y-Axis)
+                if 'Solar_2m_Avg' in available_weather:
                     fig.add_trace(go.Scatter(
                         x=df['TIMESTAMP'],
-                        y=df[param],
+                        y=df['Solar_2m_Avg'],
                         mode='lines+markers',
-                        name=weather_params[param]['label'],
-                        line=dict(width=2)
+                        name=weather_params['Solar_2m_Avg']['label'],
+                        line=dict(color='gold', width=2),
+                        yaxis='y'
                     ))
+
+                # Add Wind Speed trace (Secondary Y-Axis)
+                if 'WndAveSpd_3m' in available_weather:
+                    fig.add_trace(go.Scatter(
+                        x=df['TIMESTAMP'],
+                        y=df['WndAveSpd_3m'],
+                        mode='lines+markers',
+                        name=weather_params['WndAveSpd_3m']['label'],
+                        line=dict(color='teal', width=2),
+                        yaxis='y2'
+                    ))
+
+                # Add Relative Humidity trace (Tertiary Y-Axis)
+                if 'RH_2m_Avg' in available_weather:
+                    fig.add_trace(go.Scatter(
+                        x=df['TIMESTAMP'],
+                        y=df['RH_2m_Avg'],
+                        mode='lines+markers',
+                        name=weather_params['RH_2m_Avg']['label'],
+                        line=dict(color='dodgerblue', width=2),
+                        yaxis='y3'
+                    ))
+
+                # Update layout for multiple y-axes
                 fig.update_layout(
                     template='plotly_dark',
-                    height=300,
-                    xaxis_title='Timestamp',
-                    yaxis_title='Value',
-                    legend_title='Parameters',
+                    height=400,
+                    xaxis=dict(
+                        title='Timestamp',
+                        showgrid=True,
+                        gridwidth=1,
+                        gridcolor='gray'
+                    ),
+                    yaxis=dict(
+                        title='Solar Radiation (W/m²)',
+                        titlefont=dict(color='gold'),
+                        tickfont=dict(color='gold'),
+                        showgrid=False,
+                        side='left'
+                    ),
+                    yaxis2=dict(
+                        title='Wind Speed (m/s)',
+                        titlefont=dict(color='teal'),
+                        tickfont=dict(color='teal'),
+                        overlaying='y',
+                        side='right',
+                        showgrid=False
+                    ),
+                    yaxis3=dict(
+                        title='Relative Humidity (%)',
+                        titlefont=dict(color='dodgerblue'),
+                        tickfont=dict(color='dodgerblue'),
+                        overlaying='y',
+                        side='right',
+                        position=0.95,  # Adjusted to be within [0,1]
+                        showgrid=False
+                    ),
+                    legend=dict(
+                        x=1.05,
+                        y=1,
+                        bgcolor='rgba(0,0,0,0)',
+                        bordercolor='rgba(0,0,0,0)'
+                    ),
+                    margin=dict(r=200),  # Increased right margin to accommodate legend and yaxis3
                     hovermode='x unified'
                 )
-                fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='gray')
-                fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='gray')
+
                 st.plotly_chart(fig, use_container_width=True)
             else:
                 st.write("No weather data available.")
@@ -240,14 +355,27 @@ def main():
                     ))
                 fig.update_layout(
                     template='plotly_dark',
-                    height=300,
-                    xaxis_title='Timestamp',
-                    yaxis_title='Temperature (°C)',
-                    legend_title='Temperature Metrics',
+                    height=400,
+                    xaxis=dict(
+                        title='Timestamp',
+                        showgrid=True,
+                        gridwidth=1,
+                        gridcolor='gray'
+                    ),
+                    yaxis=dict(
+                        title='Temperature (°C)',
+                        showgrid=False,
+                        side='left'
+                    ),
+                    legend=dict(
+                        x=1.05,
+                        y=1,
+                        bgcolor='rgba(0,0,0,0)',
+                        bordercolor='rgba(0,0,0,0)'
+                    ),
+                    margin=dict(r=200),  # Increased right margin to accommodate legend
                     hovermode='x unified'
                 )
-                fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='gray')
-                fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='gray')
                 st.plotly_chart(fig, use_container_width=True)
             else:
                 st.write("No temperature data available.")
@@ -268,13 +396,27 @@ def main():
                         template='plotly_dark'
                     )
                     fig.update_layout(
-                        height=300,
-                        xaxis_title='Timestamp',
-                        yaxis_title='Rainfall (mm)',
+                        height=400,
+                        xaxis=dict(
+                            title='Timestamp',
+                            showgrid=True,
+                            gridwidth=1,
+                            gridcolor='gray'
+                        ),
+                        yaxis=dict(
+                            title='Rainfall (mm)',
+                            showgrid=False,
+                            side='left'
+                        ),
+                        legend=dict(
+                            x=1.05,
+                            y=1,
+                            bgcolor='rgba(0,0,0,0)',
+                            bordercolor='rgba(0,0,0,0)'
+                        ),
+                        margin=dict(r=200),  # Increased right margin to accommodate legend
                         hovermode='x unified'
                     )
-                    fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='gray')
-                    fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='gray')
                     st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.info("No rainfall occurred during the selected period.")
@@ -316,14 +458,27 @@ def main():
                     ))
                 fig.update_layout(
                     template='plotly_dark',
-                    height=300,
-                    xaxis_title='Timestamp',
-                    yaxis_title='Volumetric Water Content (%)',
-                    legend_title='Depths',
+                    height=400,
+                    xaxis=dict(
+                        title='Timestamp',
+                        showgrid=True,
+                        gridwidth=1,
+                        gridcolor='gray'
+                    ),
+                    yaxis=dict(
+                        title='Volumetric Water Content (%)',
+                        showgrid=False,
+                        side='left'
+                    ),
+                    legend=dict(
+                        x=1.05,
+                        y=1,
+                        bgcolor='rgba(0,0,0,0)',
+                        bordercolor='rgba(0,0,0,0)'
+                    ),
+                    margin=dict(r=200),  # Increased right margin to accommodate legend
                     hovermode='x unified'
                 )
-                fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='gray')
-                fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='gray')
                 st.plotly_chart(fig, use_container_width=True)
             else:
                 st.write("No TDR data available.")
@@ -335,7 +490,7 @@ def main():
         indices = {
             'cwsi': {'label': 'CWSI', 'color': 'indianred'},
             'swsi': {'label': 'SWSI', 'color': 'teal'},
-            'eto': {'label': 'eto', 'color': 'gold'}
+            'eto': {'label': 'ETO', 'color': 'gold'}
         }
 
         indices_data = {}
@@ -354,32 +509,69 @@ def main():
                 'Value': list(indices_data.values())
             })
 
-            # Determine the maximum value for scaling
-            max_value = max(indices_data.values()) if indices_data else 1
-
-            # Create bar chart
+            # Create figure with secondary y-axis
             fig = go.Figure()
+
             for _, row in indices_df.iterrows():
-                fig.add_trace(go.Bar(
-                    x=[row['Index']],
-                    y=[row['Value']],
-                    name=row['Index'],
-                    marker_color=indices[row['Index'].lower()]['color'],
-                    text=[f"{row['Value']:.2f}"],
-                    textposition='auto',
-                    width=0.5
-                ))
+                if row['Index'].upper() in ['CWSI', 'SWSI']:
+                    # Assign to secondary y-axis
+                    fig.add_trace(go.Bar(
+                        x=[row['Index']],
+                        y=[row['Value']],
+                        name=row['Index'],
+                        marker_color=indices[row['Index'].lower()]['color'],
+                        text=[f"{row['Value']:.2f}"],
+                        textposition='auto',
+                        width=0.5,
+                        yaxis='y2'
+                    ))
+                elif row['Index'].upper() == 'ETO':
+                    # Assign to primary y-axis
+                    fig.add_trace(go.Bar(
+                        x=[row['Index']],
+                        y=[row['Value']],
+                        name=row['Index'],
+                        marker_color=indices[row['Index'].lower()]['color'],
+                        text=[f"{row['Value']:.2f}"],
+                        textposition='auto',
+                        width=0.5,
+                        yaxis='y'
+                    ))
+
+            # Update layout with two y-axes
             fig.update_layout(
                 template='plotly_dark',
                 height=400,
-                xaxis_title='Indices',
-                yaxis_title='Value',
-                showlegend=False,
-                hovermode='x unified',
-                yaxis=dict(range=[0, max_value * 1.2])  # Add some headroom
+                barmode='group',
+                xaxis=dict(
+                    title='Indices',
+                    showgrid=True,
+                    gridwidth=1,
+                    gridcolor='gray'
+                ),
+                yaxis=dict(
+                    title='ETO',
+                    range=[0, 8],
+                    showgrid=False,
+                    side='left'
+                ),
+                yaxis2=dict(
+                    title='CWSI & SWSI',
+                    range=[0, 2],
+                    overlaying='y',
+                    side='right',
+                    showgrid=False
+                ),
+                legend=dict(
+                    x=1.05,
+                    y=1,
+                    bgcolor='rgba(0,0,0,0)',
+                    bordercolor='rgba(0,0,0,0)'
+                ),
+                margin=dict(r=200),  # Increased right margin to accommodate legend
+                hovermode='x unified'
             )
-            fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='gray')
-            fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='gray')
+
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.write("No indices data available.")
@@ -414,7 +606,7 @@ def main():
                 ))
                 fig.update_layout(
                     template='plotly_dark',
-                    height=300
+                    height=400
                 )
                 st.plotly_chart(fig, use_container_width=True)
             else:
