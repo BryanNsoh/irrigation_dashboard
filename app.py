@@ -1,4 +1,4 @@
-# app.py
+ # app.py
 
 import os
 import re
@@ -145,19 +145,69 @@ def main():
         initial_sidebar_state="expanded",
     )
 
-    # Apply dark theme CSS
+    # Inject custom CSS for dark theme and larger fonts, excluding Plotly charts
     st.markdown(
         """
         <style>
-        .css-18e3th9 {
+        /* Dark background for the main area */
+        .css-1aumxhk {  /* Adjusted for Streamlit's updated class names */
             background-color: #0e1117;
         }
-        .css-1d391kg {
+
+        /* White text for body, headers, and other elements */
+        .css-1d391kg, .css-1v0mbdj, .css-2trqyj, .css-18e3th9 {
             color: #ffffff;
         }
+
+        /* Increase font sizes */
+        /* Main Title */
         .css-1v0mbdj {
-            color: #ffffff;
+            font-size: 48px !important;
+            font-weight: bold;
         }
+
+        /* Subheaders */
+        .css-2trqyj {
+            font-size: 32px !important;
+            font-weight: bold;
+        }
+
+        /* Body Text */
+        .css-1d391kg {
+            font-size: 24px !important;
+        }
+
+        /* Sidebar Header */
+        .css-18e3th9 {
+            font-size: 28px !important;
+            font-weight: bold;
+        }
+
+        /* Additional adjustments for buttons and other elements */
+        .css-1aumxhk .stButton button {
+            font-size: 20px !important;
+            padding: 10px 24px !important;
+        }
+
+        /* Adjust selectbox font size */
+        .css-1y4p8pa p {
+            font-size: 20px !important;
+        }
+
+        /* Adjust date_input font size */
+        .css-1wa3eu0 p {
+            font-size: 20px !important;
+        }
+
+        /* Footer text */
+        .css-1v3fvcr {
+            font-size: 20px !important;
+        }
+
+        /* Remove Plotly global text size changes to preserve irrigation gauge font sizes */
+        /* .plotly .main-svg text {
+            font-size: 16px !important;
+        } */
         </style>
         """,
         unsafe_allow_html=True,
@@ -246,8 +296,7 @@ def main():
             st.subheader("☀️ **Weather Parameters**")
             weather_params = {
                 'Solar_2m_Avg': {'label': 'Solar Radiation (W/m²)', 'unit': 'W/m²'},
-                'WndAveSpd_3m': {'label': 'Wind Speed (m/s)', 'unit': 'm/s'},
-                'RH_2m_Avg': {'label': 'Relative Humidity (%)', 'unit': '%'}
+                'WndAveSpd_3m': {'label': 'Wind Speed (m/s)', 'unit': 'm/s'}
             }
             available_weather = [param for param in weather_params.keys() if param in df.columns]
             if available_weather:
@@ -275,17 +324,6 @@ def main():
                         yaxis='y2'
                     ))
 
-                # Add Relative Humidity trace (Tertiary Y-Axis)
-                if 'RH_2m_Avg' in available_weather:
-                    fig.add_trace(go.Scatter(
-                        x=df['TIMESTAMP'],
-                        y=df['RH_2m_Avg'],
-                        mode='lines+markers',
-                        name=weather_params['RH_2m_Avg']['label'],
-                        line=dict(color='dodgerblue', width=2),
-                        yaxis='y3'
-                    ))
-
                 # Update layout for multiple y-axes
                 fig.update_layout(
                     template='plotly_dark',
@@ -294,39 +332,32 @@ def main():
                         title='Timestamp',
                         showgrid=True,
                         gridwidth=1,
-                        gridcolor='gray'
+                        gridcolor='gray',
+                        tickfont=dict(size=14)
                     ),
                     yaxis=dict(
                         title='Solar Radiation (W/m²)',
-                        titlefont=dict(color='gold'),
-                        tickfont=dict(color='gold'),
+                        titlefont=dict(color='gold', size=18),
+                        tickfont=dict(color='gold', size=16),
                         showgrid=False,
                         side='left'
                     ),
                     yaxis2=dict(
                         title='Wind Speed (m/s)',
-                        titlefont=dict(color='teal'),
-                        tickfont=dict(color='teal'),
+                        titlefont=dict(color='teal', size=18),
+                        tickfont=dict(color='teal', size=16),
                         overlaying='y',
                         side='right',
-                        showgrid=False
-                    ),
-                    yaxis3=dict(
-                        title='Relative Humidity (%)',
-                        titlefont=dict(color='dodgerblue'),
-                        tickfont=dict(color='dodgerblue'),
-                        overlaying='y',
-                        side='right',
-                        position=0.95,  # Adjusted to be within [0,1]
                         showgrid=False
                     ),
                     legend=dict(
                         x=1.05,
                         y=1,
                         bgcolor='rgba(0,0,0,0)',
-                        bordercolor='rgba(0,0,0,0)'
+                        bordercolor='rgba(0,0,0,0)',
+                        font=dict(size=16)
                     ),
-                    margin=dict(r=200),  # Increased right margin to accommodate legend and yaxis3
+                    margin=dict(r=200),  # Increased right margin to accommodate legend
                     hovermode='x unified'
                 )
 
@@ -360,10 +391,13 @@ def main():
                         title='Timestamp',
                         showgrid=True,
                         gridwidth=1,
-                        gridcolor='gray'
+                        gridcolor='gray',
+                        tickfont=dict(size=14)
                     ),
                     yaxis=dict(
                         title='Temperature (°C)',
+                        titlefont=dict(size=18),
+                        tickfont=dict(size=16),
                         showgrid=False,
                         side='left'
                     ),
@@ -371,7 +405,8 @@ def main():
                         x=1.05,
                         y=1,
                         bgcolor='rgba(0,0,0,0)',
-                        bordercolor='rgba(0,0,0,0)'
+                        bordercolor='rgba(0,0,0,0)',
+                        font=dict(size=16)
                     ),
                     margin=dict(r=200),  # Increased right margin to accommodate legend
                     hovermode='x unified'
@@ -387,12 +422,14 @@ def main():
             if precip_param in df.columns:
                 # Check if there's variation in precipitation
                 if df[precip_param].nunique() > 1:
+                    #multiply by 10 to correct units
+                    precip_param = df[precip_param]*10
                     fig = px.bar(
                         df,
                         x='TIMESTAMP',
                         y=precip_param,
                         title="Rainfall (1m Total)",
-                        labels={'Rain_1m_Tot': 'Rainfall (mm)'},
+                        labels={'Rain_1m_Tot': 'Rainfall (inches)'},
                         template='plotly_dark'
                     )
                     fig.update_layout(
@@ -401,10 +438,13 @@ def main():
                             title='Timestamp',
                             showgrid=True,
                             gridwidth=1,
-                            gridcolor='gray'
+                            gridcolor='gray',
+                            tickfont=dict(size=14)
                         ),
                         yaxis=dict(
-                            title='Rainfall (mm)',
+                            title='Rainfall (inches)',
+                            titlefont=dict(size=18),
+                            tickfont=dict(size=16),
                             showgrid=False,
                             side='left'
                         ),
@@ -412,7 +452,8 @@ def main():
                             x=1.05,
                             y=1,
                             bgcolor='rgba(0,0,0,0)',
-                            bordercolor='rgba(0,0,0,0)'
+                            bordercolor='rgba(0,0,0,0)',
+                            font=dict(size=16)
                         ),
                         margin=dict(r=200),  # Increased right margin to accommodate legend
                         hovermode='x unified'
@@ -463,10 +504,13 @@ def main():
                         title='Timestamp',
                         showgrid=True,
                         gridwidth=1,
-                        gridcolor='gray'
+                        gridcolor='gray',
+                        tickfont=dict(size=14)
                     ),
                     yaxis=dict(
                         title='Volumetric Water Content (%)',
+                        titlefont=dict(size=18),
+                        tickfont=dict(size=16),
                         showgrid=False,
                         side='left'
                     ),
@@ -474,7 +518,8 @@ def main():
                         x=1.05,
                         y=1,
                         bgcolor='rgba(0,0,0,0)',
-                        bordercolor='rgba(0,0,0,0)'
+                        bordercolor='rgba(0,0,0,0)',
+                        font=dict(size=16)
                     ),
                     margin=dict(r=200),  # Increased right margin to accommodate legend
                     hovermode='x unified'
@@ -547,26 +592,30 @@ def main():
                     title='Indices',
                     showgrid=True,
                     gridwidth=1,
-                    gridcolor='gray'
+                    gridcolor='gray',
+                    tickfont=dict(size=14)
                 ),
                 yaxis=dict(
                     title='ETO',
                     range=[0, 8],
                     showgrid=False,
-                    side='left'
+                    side='left',
+                    tickfont=dict(size=16)
                 ),
                 yaxis2=dict(
                     title='CWSI & SWSI',
                     range=[0, 2],
                     overlaying='y',
                     side='right',
-                    showgrid=False
+                    showgrid=False,
+                    tickfont=dict(size=16)
                 ),
                 legend=dict(
                     x=1.05,
                     y=1,
                     bgcolor='rgba(0,0,0,0)',
-                    bordercolor='rgba(0,0,0,0)'
+                    bordercolor='rgba(0,0,0,0)',
+                    font=dict(size=16)
                 ),
                 margin=dict(r=200),  # Increased right margin to accommodate legend
                 hovermode='x unified'
@@ -585,11 +634,11 @@ def main():
                 recommendation = df[recommendation_col].dropna().iloc[-1]
                 irrigation_value = map_irrigation_recommendation(recommendation)
                 
-                # Enhanced Irrigation Bar using Gauge
+                # Enhanced Irrigation Bar using Gauge with explicit large font settings
                 fig = go.Figure(go.Indicator(
                     mode="gauge+number",
                     value=irrigation_value,
-                    title={'text': "Recommended Irrigation (inches)"},
+                    title={'text': "Recommended Irrigation (inches)", 'font': {'size': 24}},
                     gauge={
                         'axis': {'range': [0, 1], 'tickwidth': 1, 'tickcolor': "darkblue"},
                         'bar': {'color': "lightskyblue", 'thickness': 0.3},
@@ -602,7 +651,9 @@ def main():
                             'thickness': 0.75,
                             'value': irrigation_value
                         }
-                    }
+                    },
+                    number={'font': {'size': 60}},  # Explicitly set large font size for the number
+                    domain={'x': [0, 1], 'y': [0, 1]}
                 ))
                 fig.update_layout(
                     template='plotly_dark',
@@ -616,7 +667,7 @@ def main():
 
     # -------------------- Footer --------------------
     st.markdown("---")
-    st.markdown("© 2024 Crop2Cloud24. All rights reserved.")
+    st.markdown("<p class='footer-text'>© 2024 Crop2Cloud24. All rights reserved.</p>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
