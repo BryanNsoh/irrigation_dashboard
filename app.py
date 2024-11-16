@@ -1,4 +1,4 @@
- # app.py
+# app.py
 
 import os
 import re
@@ -162,52 +162,49 @@ def main():
         /* Increase font sizes */
         /* Main Title */
         .css-1v0mbdj {
-            font-size: 48px !important;
+            font-size: 60px !important; /* Increased from 48px to 60px */
             font-weight: bold;
         }
 
         /* Subheaders */
         .css-2trqyj {
-            font-size: 32px !important;
+            font-size: 40px !important; /* Increased from 32px to 40px */
             font-weight: bold;
         }
 
         /* Body Text */
         .css-1d391kg {
-            font-size: 24px !important;
+            font-size: 32px !important; /* Increased from 24px to 32px */
         }
 
         /* Sidebar Header */
         .css-18e3th9 {
-            font-size: 28px !important;
+            font-size: 36px !important; /* Increased from 28px to 36px */
             font-weight: bold;
         }
 
         /* Additional adjustments for buttons and other elements */
         .css-1aumxhk .stButton button {
-            font-size: 20px !important;
-            padding: 10px 24px !important;
+            font-size: 24px !important; /* Increased from 20px to 24px */
+            padding: 12px 28px !important; /* Increased padding for better aesthetics */
         }
 
         /* Adjust selectbox font size */
         .css-1y4p8pa p {
-            font-size: 20px !important;
+            font-size: 24px !important; /* Increased from 20px to 24px */
         }
 
         /* Adjust date_input font size */
         .css-1wa3eu0 p {
-            font-size: 20px !important;
+            font-size: 24px !important; /* Increased from 20px to 24px */
         }
 
         /* Footer text */
         .css-1v3fvcr {
-            font-size: 20px !important;
+            font-size: 24px !important; /* Increased from 20px to 24px */
         }
 
-        /* Remove Plotly global text size changes to preserve irrigation gauge font sizes */
-        /* .plotly .main-svg text {
-            font-size: 16px !important;
-        } */
+        /* Removed global Plotly text size changes to preserve individual chart configurations */
         </style>
         """,
         unsafe_allow_html=True,
@@ -333,19 +330,19 @@ def main():
                         showgrid=True,
                         gridwidth=1,
                         gridcolor='gray',
-                        tickfont=dict(size=14)
+                        tickfont=dict(size=20)  # Increased from 14 to 20
                     ),
                     yaxis=dict(
                         title='Solar Radiation (W/m²)',
-                        titlefont=dict(color='gold', size=18),
-                        tickfont=dict(color='gold', size=16),
+                        titlefont=dict(color='gold', size=24),  # Increased from 18 to 24
+                        tickfont=dict(color='gold', size=20),   # Increased from 16 to 20
                         showgrid=False,
                         side='left'
                     ),
                     yaxis2=dict(
                         title='Wind Speed (m/s)',
-                        titlefont=dict(color='teal', size=18),
-                        tickfont=dict(color='teal', size=16),
+                        titlefont=dict(color='teal', size=24),  # Increased from 18 to 24
+                        tickfont=dict(color='teal', size=20),   # Increased from 16 to 20
                         overlaying='y',
                         side='right',
                         showgrid=False
@@ -355,7 +352,7 @@ def main():
                         y=1,
                         bgcolor='rgba(0,0,0,0)',
                         bordercolor='rgba(0,0,0,0)',
-                        font=dict(size=16)
+                        font=dict(size=20)  # Increased from 16 to 20
                     ),
                     margin=dict(r=200),  # Increased right margin to accommodate legend
                     hovermode='x unified'
@@ -392,12 +389,12 @@ def main():
                         showgrid=True,
                         gridwidth=1,
                         gridcolor='gray',
-                        tickfont=dict(size=14)
+                        tickfont=dict(size=20)  # Increased from 14 to 20
                     ),
                     yaxis=dict(
                         title='Temperature (°C)',
-                        titlefont=dict(size=18),
-                        tickfont=dict(size=16),
+                        titlefont=dict(size=24),  # Increased from 18 to 24
+                        tickfont=dict(size=20),   # Increased from 16 to 20
                         showgrid=False,
                         side='left'
                     ),
@@ -406,7 +403,7 @@ def main():
                         y=1,
                         bgcolor='rgba(0,0,0,0)',
                         bordercolor='rgba(0,0,0,0)',
-                        font=dict(size=16)
+                        font=dict(size=20)  # Increased from 16 to 20
                     ),
                     margin=dict(r=200),  # Increased right margin to accommodate legend
                     hovermode='x unified'
@@ -422,12 +419,12 @@ def main():
             if precip_param in df.columns:
                 # Check if there's variation in precipitation
                 if df[precip_param].nunique() > 1:
-                    #multiply by 10 to correct units
-                    precip_param = df[precip_param]*10
+                    # Multiply by 10 to correct units
+                    precip_values = df[precip_param] * 10
                     fig = px.bar(
                         df,
                         x='TIMESTAMP',
-                        y=precip_param,
+                        y=precip_values,
                         title="Rainfall (1m Total)",
                         labels={'Rain_1m_Tot': 'Rainfall (inches)'},
                         template='plotly_dark'
@@ -439,12 +436,12 @@ def main():
                             showgrid=True,
                             gridwidth=1,
                             gridcolor='gray',
-                            tickfont=dict(size=14)
+                            tickfont=dict(size=20)  # Increased from 14 to 20
                         ),
                         yaxis=dict(
                             title='Rainfall (inches)',
-                            titlefont=dict(size=18),
-                            tickfont=dict(size=16),
+                            titlefont=dict(size=24),  # Increased from 18 to 24
+                            tickfont=dict(size=20),   # Increased from 16 to 20
                             showgrid=False,
                             side='left'
                         ),
@@ -453,7 +450,7 @@ def main():
                             y=1,
                             bgcolor='rgba(0,0,0,0)',
                             bordercolor='rgba(0,0,0,0)',
-                            font=dict(size=16)
+                            font=dict(size=20)  # Increased from 16 to 20
                         ),
                         margin=dict(r=200),  # Increased right margin to accommodate legend
                         hovermode='x unified'
@@ -505,12 +502,12 @@ def main():
                         showgrid=True,
                         gridwidth=1,
                         gridcolor='gray',
-                        tickfont=dict(size=14)
+                        tickfont=dict(size=20)  # Increased from 14 to 20
                     ),
                     yaxis=dict(
                         title='Volumetric Water Content (%)',
-                        titlefont=dict(size=18),
-                        tickfont=dict(size=16),
+                        titlefont=dict(size=24),  # Increased from 18 to 24
+                        tickfont=dict(size=20),   # Increased from 16 to 20
                         showgrid=False,
                         side='left'
                     ),
@@ -519,7 +516,7 @@ def main():
                         y=1,
                         bgcolor='rgba(0,0,0,0)',
                         bordercolor='rgba(0,0,0,0)',
-                        font=dict(size=16)
+                        font=dict(size=20)  # Increased from 16 to 20
                     ),
                     margin=dict(r=200),  # Increased right margin to accommodate legend
                     hovermode='x unified'
@@ -535,7 +532,7 @@ def main():
         indices = {
             'cwsi': {'label': 'CWSI', 'color': 'indianred'},
             'swsi': {'label': 'SWSI', 'color': 'teal'},
-            'eto': {'label': 'ETO', 'color': 'gold'}
+            'etc': {'label': 'ETC', 'color': 'gold'}  # Replaced 'eto' with 'etc'
         }
 
         indices_data = {}
@@ -570,7 +567,7 @@ def main():
                         width=0.5,
                         yaxis='y2'
                     ))
-                elif row['Index'].upper() == 'ETO':
+                elif row['Index'].upper() == 'ETC':  # Changed from 'ETO' to 'ETC'
                     # Assign to primary y-axis
                     fig.add_trace(go.Bar(
                         x=[row['Index']],
@@ -593,14 +590,14 @@ def main():
                     showgrid=True,
                     gridwidth=1,
                     gridcolor='gray',
-                    tickfont=dict(size=14)
+                    tickfont=dict(size=20)  # Increased from 14 to 20
                 ),
                 yaxis=dict(
-                    title='ETO',
+                    title='ETC',  # Changed from 'ETO' to 'ETC'
                     range=[0, 8],
                     showgrid=False,
                     side='left',
-                    tickfont=dict(size=16)
+                    tickfont=dict(size=20)  # Increased from 16 to 20
                 ),
                 yaxis2=dict(
                     title='CWSI & SWSI',
@@ -608,14 +605,14 @@ def main():
                     overlaying='y',
                     side='right',
                     showgrid=False,
-                    tickfont=dict(size=16)
+                    tickfont=dict(size=20)  # Increased from 16 to 20
                 ),
                 legend=dict(
                     x=1.05,
                     y=1,
                     bgcolor='rgba(0,0,0,0)',
                     bordercolor='rgba(0,0,0,0)',
-                    font=dict(size=16)
+                    font=dict(size=20)  # Increased from 16 to 20
                 ),
                 margin=dict(r=200),  # Increased right margin to accommodate legend
                 hovermode='x unified'
@@ -638,9 +635,9 @@ def main():
                 fig = go.Figure(go.Indicator(
                     mode="gauge+number",
                     value=irrigation_value,
-                    title={'text': "Recommended Irrigation (inches)", 'font': {'size': 24}},
+                    title={'text': "Recommended Irrigation (inches)", 'font': {'size': 36}},  # Increased from 24 to 36
                     gauge={
-                        'axis': {'range': [0, 1], 'tickwidth': 1, 'tickcolor': "darkblue"},
+                        'axis': {'range': [0, 1], 'tickwidth': 2, 'tickcolor': "darkblue"},
                         'bar': {'color': "lightskyblue", 'thickness': 0.3},
                         'steps': [
                             {'range': [0, 0.5], 'color': "lightcoral"},
@@ -652,7 +649,7 @@ def main():
                             'value': irrigation_value
                         }
                     },
-                    number={'font': {'size': 60}},  # Explicitly set large font size for the number
+                    number={'font': {'size': 80}},  # Explicitly set large font size for the number
                     domain={'x': [0, 1], 'y': [0, 1]}
                 ))
                 fig.update_layout(
