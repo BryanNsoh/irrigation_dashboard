@@ -327,29 +327,19 @@ def create_water_management_plot(df, irrigation_df, style=PLOT_STYLE):
             yaxis='y2'
         ))
 
-    # Irrigation events
-    if not irrigation_df.empty:
-        fig.add_trace(go.Bar(
-            x=irrigation_df['date'],
-            y=irrigation_df['amount_inches'],
-            name='Irrigation',
-            marker_color='green',
-            opacity=style['opacity'],
-            yaxis='y2'
-        ))
+    # Constants for bar widths and offsets
+    ONE_DAY_MS = 86400000  # milliseconds in a day
+    RAIN_WIDTH = ONE_DAY_MS * 0.98  # 98% of day width
+    IRR_WIDTH = ONE_DAY_MS * 0.6    # 60% of day width
+    IRR_OFFSET = ONE_DAY_MS * 0.2   # Offset irrigation bars by 20% of day
 
-    # Rainfall calculation with daily bars
+    # Rainfall bars
     rain_data = df[df['variable_name'] == 'Rain_1m_Tot'].copy()
     if not rain_data.empty:
-        # Group by date and sum rainfall
         rain_data['date'] = rain_data['timestamp'].dt.date
         daily_rain = rain_data.groupby('date')['value'].sum().reset_index()
         daily_rain['date'] = pd.to_datetime(daily_rain['date'])
         
-        # Set bar width to 1800000 milliseconds (30 minutes) less than a day
-        # One day = 86400000 milliseconds
-        bar_width = 84600000  # ~23.5 hours, leaving 30 min gaps between bars
-
         fig.add_trace(go.Bar(
             x=daily_rain['date'],
             y=daily_rain['value'],
@@ -357,7 +347,19 @@ def create_water_management_plot(df, irrigation_df, style=PLOT_STYLE):
             marker_color='blue',
             opacity=style['opacity'],
             yaxis='y2',
-            width=bar_width  # This sets the width of each bar
+            width=RAIN_WIDTH
+        ))
+
+    # Irrigation bars - narrower and offset
+    if not irrigation_df.empty:
+        fig.add_trace(go.Bar(
+            x=[d + pd.Timedelta(milliseconds=IRR_OFFSET) for d in irrigation_df['date']],
+            y=irrigation_df['amount_inches'],
+            name='Irrigation',
+            marker_color='green',
+            opacity=style['opacity'],
+            yaxis='y2',
+            width=IRR_WIDTH
         ))
 
     fig.update_layout(
