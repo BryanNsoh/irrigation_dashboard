@@ -40,9 +40,9 @@ conn = sqlite3.connect(DB_PATH)
 
 # Custom styling for plots
 PLOT_STYLE = {
-    'font_size': 16,
-    'title_size': 18,
-    'legend_size': 14,
+    'font_size': 20,
+    'title_size': 24,
+    'legend_size': 18,
     'line_width': 3,
     'marker_size': 8,
     'bar_width': 1800000,  # 30 minutes in milliseconds
@@ -55,10 +55,12 @@ COMMON_LAYOUT = {
         domain=[0.1, 0.9],  # Consistent domain for all plots
         showgrid=True,
         gridcolor='rgba(128, 128, 128, 0.2)',
+        tickfont=dict(size=18),
     ),
-    'margin': dict(l=80, r=80, t=40, b=40),  # Consistent margins
+    'margin': dict(l=80, r=80, t=50, b=50),  # Consistent margins
     'showlegend': True,
-    'plot_bgcolor': 'white'
+    'plot_bgcolor': 'white',
+    'font': dict(size=18)
 }
 
 def get_plot_metadata():
@@ -208,7 +210,7 @@ def create_weather_plot(df_pivot, style=PLOT_STYLE):
             y=0.95,
             xanchor='center',
             yanchor='top',
-            font=dict(size=14)
+            font=dict(size=style['title_size'])
         ),
         'yaxis': dict(
             title=None,
@@ -307,7 +309,7 @@ def create_temperature_plot(df, df_pivot, style=PLOT_STYLE):
             y=0.95,
             xanchor='center',
             yanchor='top',
-            font=dict(size=14)
+            font=dict(size=style['title_size'])
         ),
         'yaxis': dict(
             title='Temperature (°C)',
@@ -405,7 +407,7 @@ def create_water_management_plot(df, irrigation_df, style=PLOT_STYLE):
             y=0.95,
             xanchor='center',
             yanchor='top',
-            font=dict(size=14)
+            font=dict(size=style['title_size'])
         ),
         'yaxis': dict(
             title='VWC (%)',
