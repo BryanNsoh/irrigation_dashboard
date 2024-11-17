@@ -330,8 +330,8 @@ def create_water_management_plot(df, irrigation_df, style=PLOT_STYLE):
     # Constants for bar widths and offsets
     ONE_DAY_MS = 86400000  # milliseconds in a day
     RAIN_WIDTH = ONE_DAY_MS * 0.98  # 98% of day width
-    IRR_WIDTH = ONE_DAY_MS * 0.6    # 60% of day width
-    IRR_OFFSET = ONE_DAY_MS * 0.2   # Offset irrigation bars by 20% of day
+    IRR_WIDTH = ONE_DAY_MS * 0.98   # Changed to match rainfall width
+    IRR_OFFSET = 0                   # Removed offset since we want full day span
 
     # Rainfall bars
     rain_data = df[df['variable_name'] == 'Rain_1m_Tot'].copy()
@@ -350,10 +350,10 @@ def create_water_management_plot(df, irrigation_df, style=PLOT_STYLE):
             width=RAIN_WIDTH
         ))
 
-    # Irrigation bars - narrower and offset
+    # Irrigation bars - now full width
     if not irrigation_df.empty:
         fig.add_trace(go.Bar(
-            x=[d + pd.Timedelta(milliseconds=IRR_OFFSET) for d in irrigation_df['date']],
+            x=irrigation_df['date'],  # Removed offset
             y=irrigation_df['amount_inches'],
             name='Irrigation',
             marker_color='green',
