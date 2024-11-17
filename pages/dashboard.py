@@ -142,42 +142,38 @@ def create_weather_plot(df_pivot, style=PLOT_STYLE):
     """Create weather conditions plot"""
     fig = go.Figure()
 
-    # Solar radiation
-    if 'Solar_2m_Avg' in df_pivot.columns:
-        fig.add_trace(go.Scatter(
-            x=df_pivot['timestamp'],
-            y=df_pivot['Solar_2m_Avg'],
-            name='Solar Radiation',
-            line=dict(color='gold', width=style['line_width']),
-            yaxis='y'
-        ))
+    # Update trace names to include units
+    fig.add_trace(go.Scatter(
+        x=df_pivot['timestamp'],
+        y=df_pivot['Solar_2m_Avg'],
+        name='Solar Radiation (W/m²)',
+        line=dict(color='gold', width=style['line_width']),
+        yaxis='y'
+    ))
 
-    # ETC
     if 'etc' in df_pivot.columns:
         fig.add_trace(go.Scatter(
             x=df_pivot['timestamp'],
             y=df_pivot['etc'],
-            name='ETC',
+            name='ETC (mm)',
             line=dict(color='red', width=style['line_width']),
             yaxis='y2'
         ))
 
-    # Wind speed
     if 'WndAveSpd_3m' in df_pivot.columns:
         fig.add_trace(go.Scatter(
             x=df_pivot['timestamp'],
             y=df_pivot['WndAveSpd_3m'],
-            name='Wind Speed',
+            name='Wind Speed (m/s)',
             line=dict(color='blue', width=style['line_width']),
             yaxis='y3'
         ))
 
-    # Relative humidity
     if 'RH_2m_Avg' in df_pivot.columns:
         fig.add_trace(go.Scatter(
             x=df_pivot['timestamp'],
             y=df_pivot['RH_2m_Avg'],
-            name='RH',
+            name='RH (%)',
             line=dict(color='green', width=style['line_width']),
             yaxis='y4'
         ))
@@ -225,10 +221,10 @@ def create_weather_plot(df_pivot, style=PLOT_STYLE):
             y=1.02,
             font=dict(size=style['legend_size'])
         ),
-        margin=dict(l=100, r=100, t=40, b=40),
+        margin=dict(l=80, r=80, t=40, b=40),  # Reduced margins
         showlegend=True,
         plot_bgcolor='white',
-        xaxis=dict(domain=[0.1, 0.9])
+        xaxis=dict(domain=[0.05, 0.95])  # Expanded plot width
     )
     
     return fig
@@ -458,7 +454,7 @@ def main():
         initial_sidebar_state="collapsed"
     )
 
-    st.title("🌾 **CROP2CLOUD Platform** 🌾")
+    st.title("🌾 **CROP2CLOUD Platform** ����")
 
     # Get plot metadata
     plot_metadata = get_plot_metadata()
