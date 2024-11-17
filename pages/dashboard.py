@@ -338,49 +338,27 @@ def create_water_management_plot(df, irrigation_df, style=PLOT_STYLE):
             yaxis='y2'
         ))
 
-    # Rainfall calculation with intensity-weighted timestamp
+    # Rainfall calculation with daily bars
     rain_data = df[df['variable_name'] == 'Rain_1m_Tot'].copy()
     if not rain_data.empty:
+        # Group by date and sum rainfall
         rain_data['date'] = rain_data['timestamp'].dt.date
+        daily_rain = rain_data.groupby('date')['value'].sum().reset_index()
+        daily_rain['date'] = pd.to_datetime(daily_rain['date'])
         
-        daily_rain = []
-        for date, group in rain_data.groupby('date'):
-            total_rain = group['value'].sum()
-            if total_rain > 0:  # Only process days with rainfall
-                try:
-                    # Calculate cumulative rainfall for this day
-                    group['cumsum'] = group['value'].cumsum()
-                    median_point = total_rain / 2
-                    
-                    # Find the closest point to 50% of total rainfall
-                    group['distance_to_median'] = abs(group['cumsum'] - median_point)
-                    median_timestamp = group.loc[group['distance_to_median'].idxmin(), 'timestamp']
-                    
-                except (IndexError, KeyError, ValueError) as e:
-                    # Fallback: use the timestamp of maximum rainfall if median calculation fails
-                    log_diagnostic(f"Median calculation failed for {date}, using max rainfall timestamp instead. Error: {e}")
-                    median_timestamp = group.loc[group['value'].idxmax(), 'timestamp']
-                    
-                except Exception as e:
-                    # Ultimate fallback: use the mean timestamp of the day
-                    log_diagnostic(f"Both median and max calculations failed for {date}. Error: {e}")
-                    median_timestamp = group['timestamp'].mean()
-                
-                daily_rain.append({
-                    'timestamp': median_timestamp,
-                    'value': total_rain
-                })
-        
-        if daily_rain:  # Check if we have any data to plot
-            daily_rain_df = pd.DataFrame(daily_rain)
-            fig.add_trace(go.Bar(
-                x=daily_rain_df['timestamp'],
-                y=daily_rain_df['value'],
-                name='Rainfall',
-                marker_color='blue',
-                opacity=style['opacity'],
-                yaxis='y2'
-            ))
+        # Set bar width to 1800000 milliseconds (30 minutes) less than a day
+        # One day = 86400000 milliseconds
+        bar_width = 84600000  # ~23.5 hours, leaving 30 min gaps between bars
+
+        fig.add_trace(go.Bar(
+            x=daily_rain['date'],
+            y=daily_rain['value'],
+            name='Rainfall',
+            marker_color='blue',
+            opacity=style['opacity'],
+            yaxis='y2',
+            width=bar_width  # This sets the width of each bar
+        ))
 
     fig.update_layout(
         height=300,
