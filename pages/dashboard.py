@@ -1,15 +1,35 @@
+import logging
 import os
 import re
 import sqlite3
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+# Set up logging
+log_dir = Path("logs")
+log_dir.mkdir(exist_ok=True)
+log_file = log_dir / f"dashboard_debug_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+
+logging.basicConfig(
+    filename=log_file,
+    level=logging.INFO,
+    format='%(asctime)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+def log_diagnostic(message, data=None):
+    """Log diagnostic information to both file and console"""
+    logging.info(message)
+    if data is not None:
+        logging.info(f"Data: {data}")
+
 # Database path
-DB_PATH = r"C:\Users\bnsoh2\OneDrive - University of Nebraska-Lincoln\Documents\Projects\masters-project\cwsi-swsi-et\experiment_data_20241024.sqlite"
+DB_PATH = r"C:\Users\bnsoh2\OneDrive - University of Nebraska-Lincoln\Documents\Projects\masters-project\cwsi-swsi-et\experiment_data_20241116.sqlite"
 
 if not os.path.exists(DB_PATH):
     st.error(f"Database not found at {DB_PATH}.")
@@ -27,18 +47,14 @@ def get_plot_metadata():
     """
     return pd.read_sql_query(query, conn)
 
-def get_variable_names():
-    query = "SELECT DISTINCT variable_name FROM data"
-    df = pd.read_sql_query(query, conn)
-    return df['variable_name'].tolist()
-
 def parse_sensor_name(sensor_name):
-    pattern = r'^(?P<SensorType>[A-Z]{3})(?P<FieldNumber>\d{4})(?P<Node>[A-E])(?P<Treatment>[1256])(?P<Depth>\d{2}|xx)(?P<Timestamp>\d{2})$'
+    pattern = r'^(?P<SensorType>[A-Z]{3})(?P<FieldNumber>\d{4})(?P<Node>[A-E])(?P<Treatment>[1-4])(?P<Depth>\d{2}|xx)24$'
     match = re.match(pattern, sensor_name)
     return match.groupdict() if match else {}
 
 @st.cache_data(ttl=600)
 def fetch_data(plot_id, start_date, end_date):
+    """Fetch data from database"""
     query = f"""
         SELECT timestamp, variable_name, value
         FROM data
@@ -47,6 +63,19 @@ def fetch_data(plot_id, start_date, end_date):
         ORDER BY timestamp ASC
     """
     df = pd.read_sql_query(query, conn)
+    
+    # Convert timestamp to datetime
+    df['timestamp'] = pd.to_datetime(df['timestamp'])
+    
+    # Convert values to numeric, coercing errors to NaN
+    df['value'] = pd.to_numeric(df['value'], errors='coerce')
+    
+    # Drop rows where value is NaN
+    df = df.dropna(subset=['value'])
+    
+    # Keep only the first occurrence for each timestamp-variable combination
+    df = df.groupby(['timestamp', 'variable_name']).first().reset_index()
+    
     return df
 
 @st.cache_data(ttl=600)
@@ -59,456 +88,316 @@ def fetch_irrigation_events(plot_id, start_date, end_date):
         ORDER BY date ASC
     """
     df = pd.read_sql_query(query, conn)
+    df['date'] = pd.to_datetime(df['date'])
     return df
 
-def get_sensor_columns(df, sensor_type):
-    pattern = rf'^{sensor_type}\d+'
-    return [col for col in df['variable_name'].unique() if re.match(pattern, col)]
+def normalize_cwsi(value):
+    """Normalize CWSI from 0-1.75 to 0-1 scale"""
+    try:
+        if pd.isna(value) or value is None:
+            return None
+        return float(value) / 1.75
+    except (TypeError, ValueError):
+        return None
 
-def map_irrigation_recommendation(recommendation):
-    if isinstance(recommendation, (float, int)):
-        return float(recommendation)
-    elif isinstance(recommendation, str):
-        if recommendation.lower() == 'irrigate':
-            return 1.0
-        elif recommendation.lower() in ["don't irrigate", "dont irrigate"]:
-            return 0.0
-    return 0.0
+def diagnose_data(df, df_pivot):
+    """Diagnose data availability and quality"""
+    required_vars = {
+        'Weather': ['Solar_2m_Avg', 'WndAveSpd_3m', 'RH_2m_Avg', 'etc'],
+        'Temperature': ['Ta_2m_Avg', 'cwsi'],
+        'Water': ['swsi', 'Rain_1m_Tot']
+    }
+    
+    # Get available variables
+    available_vars = df['variable_name'].unique()
+    log_diagnostic(f"\nAvailable variables: {sorted(available_vars)}")
+    
+    # Check TDR sensors
+    tdr_sensors = [v for v in available_vars if v.startswith('TDR')]
+    log_diagnostic(f"\nFound TDR sensors: {tdr_sensors}")
+    
+    # Check for missing required variables
+    for category, vars in required_vars.items():
+        missing = [v for v in vars if v not in available_vars]
+        if missing:
+            log_diagnostic(f"\nMissing {category} variables: {missing}")
+        
+        # Log data ranges for available variables
+        for var in vars:
+            if var in available_vars:
+                var_data = df[df['variable_name'] == var]
+                log_diagnostic(
+                    f"\n{var} data:",
+                    f"Count: {len(var_data)}, Range: {var_data['value'].min():.2f} to {var_data['value'].max():.2f}"
+                )
+
+    return {
+        'available_vars': available_vars,
+        'tdr_sensors': tdr_sensors,
+        'missing_vars': {cat: [v for v in vars if v not in available_vars] 
+                        for cat, vars in required_vars.items()}
+    }
 
 def main():
     st.set_page_config(
-        page_title="🌾 Irrigation Management Dashboard 🌾",
+        page_title="Crop2Cloud Platform",
         layout="wide",
-        initial_sidebar_state="expanded",
+        initial_sidebar_state="collapsed"
     )
 
     st.title("🌾 **CROP2CLOUD Platform** 🌾")
 
-    # Get plot metadata for enhanced selection
+    # Get plot metadata
     plot_metadata = get_plot_metadata()
     
     # Create plot selection options with metadata
     plot_options = {
-        row['plot_id']: f"Plot {row['plot_id']} - {row['crop_type']} ({row['trt_name']})"
+        row['plot_id']: f"Plot {row['plot_id']} - {row['crop_type'].title()} ({row['trt_name']})"
         for _, row in plot_metadata.iterrows()
     }
 
-    with st.sidebar:
-        st.header("📊 Controls")
+    # Left column (1/3 width) for controls and summary
+    left_col, right_col = st.columns([1, 2])
+
+    with left_col:
+        st.header("Plot Selection & Summary")
         plot_selection = st.selectbox(
             "Select Plot",
             options=list(plot_options.keys()),
             format_func=lambda x: plot_options[x]
         )
         
-        current_plot = plot_metadata[plot_metadata['plot_id'] == plot_selection].iloc[0]
-        
-        date_range = st.date_input("Select Date Range", [
-            datetime.today() - timedelta(days=7),
-            datetime.today()
-        ])
-        if len(date_range) == 1:
-            start_date = date_range[0]
-            end_date = datetime.today()
-        elif len(date_range) == 2:
+        date_range = st.date_input(
+            "Select Date Range",
+            [datetime.today() - timedelta(days=7), datetime.today()]
+        )
+
+        if len(date_range) == 2:
             start_date, end_date = date_range
         else:
             st.error("Please select a valid date range.")
             st.stop()
-            
-        if st.button("🔄 Refresh Data"):
-            st.experimental_rerun()
 
+        current_plot = plot_metadata[plot_metadata['plot_id'] == plot_selection].iloc[0]
+
+        # Display plot summary
+        st.subheader("Plot Information")
+        st.write(f"**Crop Type:** {current_plot['crop_type'].title()}")
+        st.write(f"**Treatment:** {current_plot['trt_name']}")
+        st.write(f"**Treatment Number:** {current_plot['treatment']}")
+
+    # Fetch data
     start_date_str = start_date.strftime('%Y-%m-%d')
     end_date_str = end_date.strftime('%Y-%m-%d')
-
-    with st.spinner("🔍 Fetching data from the database..."):
+    
+    with st.spinner("Loading data..."):
         df = fetch_data(plot_selection, start_date_str, end_date_str)
         irrigation_df = fetch_irrigation_events(plot_selection, start_date_str, end_date_str)
+        
+        # Run diagnostics
+        diagnostic_info = diagnose_data(df, None)  # We'll create df_pivot after diagnostics
+        
+        # Create pivot table for easier plotting
+        df_pivot = df.pivot(index='timestamp', columns='variable_name', values='value').reset_index()
 
-    if df.empty:
-        st.warning("⚠️ No data available for the selected plot and date range.")
+    if df_pivot.empty:
+        st.warning("No data available for the selected period.")
         st.stop()
 
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
-    irrigation_df['date'] = pd.to_datetime(irrigation_df['date'])
-    
-    data_pivot = df.pivot_table(index='timestamp', columns='variable_name', values='value').reset_index()
-
-    left_col, right_col = st.columns([3, 1], gap="small")
-
-    with left_col:
-        grid1, grid2 = st.columns(2, gap="small")
-        grid3, grid4 = st.columns(2, gap="small")
-
-        # Top-Left Box: Combined Weather Parameters
-        with grid1:
-            st.subheader("☀️ **Weather Parameters**")
-            weather_params = {
-                'Solar_2m_Avg': {'label': 'Solar Radiation (W/m²)', 'unit': 'W/m²'},
-                'WndAveSpd_3m': {'label': 'Wind Speed (m/s)', 'unit': 'm/s'}
-            }
-            available_weather = [param for param in weather_params.keys() if param in data_pivot.columns]
-            if available_weather:
-                fig = go.Figure()
-
-                if 'Solar_2m_Avg' in available_weather:
-                    fig.add_trace(go.Scatter(
-                        x=data_pivot['timestamp'],
-                        y=data_pivot['Solar_2m_Avg'],
-                        mode='lines+markers',
-                        name=weather_params['Solar_2m_Avg']['label'],
-                        line=dict(color='gold', width=2),
-                        yaxis='y'
-                    ))
-
-                if 'WndAveSpd_3m' in available_weather:
-                    fig.add_trace(go.Scatter(
-                        x=data_pivot['timestamp'],
-                        y=data_pivot['WndAveSpd_3m'],
-                        mode='lines+markers',
-                        name=weather_params['WndAveSpd_3m']['label'],
-                        line=dict(color='teal', width=2),
-                        yaxis='y2'
-                    ))
-
-                fig.update_layout(
-                    template='plotly_white',
-                    height=400,
-                    title=f"{current_plot['crop_type']} - {current_plot['trt_name']}",
-                    xaxis=dict(title='Timestamp', showgrid=True, gridwidth=1, gridcolor='gray', tickfont=dict(size=12)),
-                    yaxis=dict(
-                        title='Solar Radiation (W/m²)',
-                        titlefont=dict(color='gold', size=14),
-                        tickfont=dict(color='gold', size=12),
-                        showgrid=False,
-                        side='left'
-                    ),
-                    yaxis2=dict(
-                        title='Wind Speed (m/s)',
-                        titlefont=dict(color='teal', size=14),
-                        tickfont=dict(color='teal', size=12),
-                        overlaying='y',
-                        side='right',
-                        showgrid=False
-                    ),
-                    legend=dict(x=1.05, y=1, bgcolor='rgba(0,0,0,0)', bordercolor='rgba(0,0,0,0)', font=dict(size=12)),
-                    margin=dict(r=200),
-                    hovermode='x unified'
-                )
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.write("No weather data available.")
-
-        # Top-Right Box: Temperature (Air & Canopy)
-        with grid2:
-            st.subheader("🌡️ **Temperature**")
-            
-            # Get IRT data for canopy temperature
-            irt_columns = get_sensor_columns(df, 'IRT')
-            
-            fig = go.Figure()
-            
-            # Add canopy temperature if available
-            if irt_columns:
-                irt_data = df[df['variable_name'].isin(irt_columns)]
-                if not irt_data.empty:
-                    fig.add_trace(go.Scatter(
-                        x=irt_data['timestamp'],
-                        y=irt_data['value'],
-                        mode='lines+markers',
-                        name='Canopy Temperature',
-                        line=dict(color='red', width=2)
-                    ))
-            
-            # Add max/min temperatures
-            if 'TaMax_2m' in data_pivot.columns:
-                fig.add_trace(go.Scatter(
-                    x=data_pivot['timestamp'],
-                    y=data_pivot['TaMax_2m'],
-                    mode='lines',
-                    name='Max Air Temperature',
-                    line=dict(color='orange', dash='dash')
-                ))
-            
-            if 'TaMin_2m' in data_pivot.columns:
-                fig.add_trace(go.Scatter(
-                    x=data_pivot['timestamp'],
-                    y=data_pivot['TaMin_2m'],
-                    mode='lines',
-                    name='Min Air Temperature',
-                    line=dict(color='blue', dash='dash')
-                ))
-
-            fig.update_layout(
-                template='plotly_white',
-                height=400,
-                title=f"{current_plot['crop_type']} - {current_plot['trt_name']}",
-                xaxis=dict(title='Timestamp', showgrid=True, gridwidth=1, gridcolor='gray', tickfont=dict(size=12)),
-                yaxis=dict(
-                    title='Temperature (°C)',
-                    titlefont=dict(size=14),
-                    tickfont=dict(size=12),
-                    showgrid=False,
-                    side='left'
-                ),
-                legend=dict(x=1.05, y=1, bgcolor='rgba(0,0,0,0)', bordercolor='rgba(0,0,0,0)', font=dict(size=12)),
-                margin=dict(r=200),
-                hovermode='x unified'
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        # Combined VWC and Irrigation Graph (replacing both previous graphs)
-        with grid3:
-            st.subheader("💧 **Soil Moisture & Water Inputs**")
-            
-            tdr_columns = get_sensor_columns(df, 'TDR')
-            if tdr_columns:
-                # Process TDR data
-                depth_info = {}
-                for tdr in tdr_columns:
-                    parsed = parse_sensor_name(tdr)
-                    depth = parsed.get('Depth', 'xx')
-                    if depth != 'xx':
-                        depth_label = f"Depth {depth} cm"
-                    else:
-                        depth_label = "Depth N/A"
-                    depth_info[tdr] = depth_label
-
-                def sort_key(col):
-                    label = depth_info[col]
-                    match = re.search(r'\d+', label)
-                    return int(match.group()) if match else 0
-
-                sorted_tdr = sorted(tdr_columns, key=sort_key)
-
-                # Create combined figure
-                fig = go.Figure()
-
-                # Add VWC traces
-                for tdr in sorted_tdr:
-                    tdr_df = df[df['variable_name'] == tdr]
-                    fig.add_trace(go.Scatter(
-                        x=tdr_df['timestamp'],
-                        y=tdr_df['value'],
-                        mode='lines',
-                        name=depth_info[tdr],
-                        line=dict(width=2),
-                        yaxis='y'
-                    ))
-
-                # Add rainfall bars
-                if 'Rain_1m_Tot' in data_pivot.columns:
-                    rainfall_data = data_pivot[data_pivot['Rain_1m_Tot'] > 0]
-                    if not rainfall_data.empty:
-                        fig.add_trace(go.Bar(
-                            x=rainfall_data['timestamp'],
-                            y=rainfall_data['Rain_1m_Tot'],
-                            name='Rainfall (mm)',
-                            marker_color='blue',
-                            opacity=0.7,
-                            yaxis='y2'
-                        ))
-
-                # Add irrigation events
-                if not irrigation_df.empty:
-                    fig.add_trace(go.Bar(
-                        x=irrigation_df['date'],
-                        y=irrigation_df['amount_mm'],
-                        name='Irrigation (mm)',
-                        marker_color='green',
-                        opacity=0.7,
-                        yaxis='y2'
-                    ))
-
-                fig.update_layout(
-                    template='plotly_white',
-                    height=600,  # Increased height
-                    title=f"{current_plot['crop_type']} - {current_plot['trt_name']}",
-                    xaxis=dict(
-                        title='Date',
-                        showgrid=True,
-                        gridwidth=1,
-                        gridcolor='gray',
-                        tickfont=dict(size=12)
-                    ),
-                    yaxis=dict(
-                        title='Volumetric Water Content (%)',
-                        titlefont=dict(size=14),
-                        tickfont=dict(size=12),
-                        showgrid=True,
-                        side='left'
-                    ),
-                    yaxis2=dict(
-                        title='Water Input (mm)',
-                        titlefont=dict(size=14),
-                        tickfont=dict(size=12),
-                        overlaying='y',
-                        side='right',
-                        showgrid=False,
-                        range=[0, max(
-                            data_pivot.get('Rain_1m_Tot', pd.Series([0])).max() * 1.2,
-                            irrigation_df.get('amount_mm', pd.Series([0])).max() * 1.2,
-                            0.1  # Minimum range
-                        )]
-                    ),
-                    legend=dict(
-                        x=1.05,
-                        y=1,
-                        bgcolor='rgba(0,0,0,0)',
-                        bordercolor='rgba(0,0,0,0)',
-                        font=dict(size=12)
-                    ),
-                    margin=dict(r=200),
-                    hovermode='x unified',
-                    barmode='overlay'
-                )
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.write("No soil moisture data available.")
-
-        # Remove the original grid4 content since we've combined the graphs
-        with grid4:
-            st.empty()
-
     with right_col:
-        # Indices Visualization
-        st.subheader("📊 **Irrigation Indices**")
+        # 1. Weather Graph
+        st.subheader("Weather Conditions")
+        fig1 = go.Figure()
 
-        indices = {
-            'cwsi': {'label': 'CWSI', 'color': 'indianred'},
-            'swsi': {'label': 'SWSI', 'color': 'teal'},
-            'etc': {'label': 'ETC', 'color': 'gold'}
-        }
-
-        indices_data = {}
-        for key, meta in indices.items():
-            # Handle case-insensitive matching
-            matching_rows = df[df['variable_name'].str.lower() == key.lower()]
-            if not matching_rows.empty:
-                latest_value = matching_rows['value'].dropna().iloc[-1]
-                indices_data[meta['label']] = latest_value
-
-        if indices_data:
-            indices_df = pd.DataFrame({
-                'Index': list(indices_data.keys()),
-                'Value': list(indices_data.values())
-            })
-
-            # Create figure with secondary y-axis
-            fig = go.Figure()
-
-            for _, row in indices_df.iterrows():
-                if row['Index'].upper() in ['CWSI', 'SWSI']:
-                    # Assign to secondary y-axis
-                    fig.add_trace(go.Bar(
-                        x=[row['Index']],
-                        y=[row['Value']],
-                        name=row['Index'],
-                        marker_color=indices[row['Index'].lower()]['color'],
-                        text=[f"{row['Value']:.2f}"],
-                        textposition='auto',
-                        width=0.5,
-                        yaxis='y2'
-                    ))
-                elif row['Index'].upper() == 'ETC':
-                    # Assign to primary y-axis
-                    fig.add_trace(go.Bar(
-                        x=[row['Index']],
-                        y=[row['Value']],
-                        name=row['Index'],
-                        marker_color=indices[row['Index'].lower()]['color'],
-                        text=[f"{row['Value']:.2f}"],
-                        textposition='auto',
-                        width=0.5,
-                        yaxis='y'
-                    ))
-
-            # Update layout with two y-axes
-            fig.update_layout(
-                template='plotly_white',
-                height=400,
-                title=f"{current_plot['crop_type']} - {current_plot['trt_name']}",
-                barmode='group',
-                xaxis=dict(
-                    title='Indices',
-                    showgrid=True,
-                    gridwidth=1,
-                    gridcolor='gray',
-                    tickfont=dict(size=12)
-                ),
-                yaxis=dict(
-                    title='ETC',
-                    range=[0, 8],
-                    showgrid=False,
-                    side='left',
-                    tickfont=dict(size=12)
-                ),
-                yaxis2=dict(
-                    title='CWSI & SWSI',
-                    range=[0, 2],
-                    overlaying='y',
-                    side='right',
-                    showgrid=False,
-                    tickfont=dict(size=12)
-                ),
-                legend=dict(
-                    x=1.05,
-                    y=1,
-                    bgcolor='rgba(0,0,0,0)',
-                    bordercolor='rgba(0,0,0,0)',
-                    font=dict(size=12)
-                ),
-                margin=dict(r=200),
-                hovermode='x unified'
-            )
-
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.write("No indices data available.")
-
-        # Irrigation Recommendation Bar
-        st.subheader("💧 **Irrigation Recommendation**")
-        recommendation_rows = df[df['variable_name'].str.lower() == 'recommendation']
-        if not recommendation_rows.empty:
-            recommendation = recommendation_rows['value'].dropna().iloc[-1]
-            irrigation_value = map_irrigation_recommendation(recommendation)
-
-            # Enhanced Irrigation Bar using Gauge
-            fig = go.Figure(go.Indicator(
-                mode="gauge+number",
-                value=irrigation_value,
-                title={
-                    'text': f"Recommended Irrigation (inches)\n{current_plot['crop_type']} - {current_plot['trt_name']}", 
-                    'font': {'size': 24}
-                },
-                gauge={
-                    'axis': {'range': [0, 1], 'tickwidth': 2, 'tickcolor': "darkblue"},
-                    'bar': {'color': "lightskyblue", 'thickness': 0.3},
-                    'steps': [
-                        {'range': [0, 0.5], 'color': "lightcoral"},
-                        {'range': [0.5, 1], 'color': "lightgreen"}
-                    ],
-                    'threshold': {
-                        'line': {'color': "black", 'width': 4},
-                        'thickness': 0.75,
-                        'value': irrigation_value
-                    }
-                },
-                number={'font': {'size': 36}},
-                domain={'x': [0, 1], 'y': [0, 1]}
+        # Solar radiation
+        if 'Solar_2m_Avg' in df_pivot.columns:
+            fig1.add_trace(go.Scatter(
+                x=df_pivot['timestamp'],
+                y=df_pivot['Solar_2m_Avg'],
+                name='Solar Radiation',
+                line=dict(color='gold', width=2),
+                yaxis='y'
             ))
-            fig.update_layout(
-                template='plotly_white',
-                height=400
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("No irrigation recommendation available.")
+
+        # Wind speed
+        if 'WndAveSpd_3m' in df_pivot.columns:
+            fig1.add_trace(go.Scatter(
+                x=df_pivot['timestamp'],
+                y=df_pivot['WndAveSpd_3m'],
+                name='Wind Speed',
+                line=dict(color='blue', width=2),
+                yaxis='y2'
+            ))
+
+        # Relative humidity
+        if 'RH_2m_Avg' in df_pivot.columns:
+            fig1.add_trace(go.Scatter(
+                x=df_pivot['timestamp'],
+                y=df_pivot['RH_2m_Avg'],
+                name='Relative Humidity',
+                line=dict(color='green', width=2),
+                yaxis='y3'
+            ))
+
+        # ETC
+        if 'etc' in df_pivot.columns:
+            fig1.add_trace(go.Scatter(
+                x=df_pivot['timestamp'],
+                y=df_pivot['etc'],
+                name='ETC',
+                line=dict(color='red', width=2),
+                yaxis='y'
+            ))
+
+        fig1.update_layout(
+            height=300,
+            yaxis=dict(
+                title='Solar Radiation (W/m²) / ETC (mm)',
+                side='left'
+            ),
+            yaxis2=dict(
+                title='Wind Speed (m/s)',
+                overlaying='y',
+                side='right'
+            ),
+            yaxis3=dict(
+                title='RH (%)',
+                overlaying='y',
+                side='right',
+                position=0.85,
+                titlefont=dict(color='green'),
+                tickfont=dict(color='green')
+            ),
+            legend=dict(orientation='h', yanchor='bottom', y=1.02),
+            margin=dict(l=60, r=60, t=40, b=40)
+        )
+        st.plotly_chart(fig1, use_container_width=True)
+
+        # 2. Temperature & CWSI Graph
+        st.subheader("Temperature & Crop Water Stress")
+        fig2 = go.Figure()
+
+        # Canopy temperature (IRT sensors)
+        irt_columns = [col for col in df['variable_name'].unique() if col.startswith('IRT')]
+        if irt_columns:
+            for irt in irt_columns:
+                irt_data = df[df['variable_name'] == irt]
+                fig2.add_trace(go.Scatter(
+                    x=irt_data['timestamp'],
+                    y=irt_data['value'],
+                    name='Canopy Temperature',
+                    line=dict(color='red', width=2)
+                ))
+
+        # Air temperature
+        if 'Ta_2m_Avg' in df_pivot.columns:
+            fig2.add_trace(go.Scatter(
+                x=df_pivot['timestamp'],
+                y=df_pivot['Ta_2m_Avg'],
+                name='Air Temperature',
+                line=dict(color='orange', width=2)
+            ))
+
+        # CWSI as bars
+        cwsi_data = df[df['variable_name'] == 'cwsi'].copy()
+        if not cwsi_data.empty:
+            cwsi_data['value'] = cwsi_data['value'].apply(normalize_cwsi)
+            cwsi_data = cwsi_data.dropna(subset=['value'])
+            if not cwsi_data.empty:
+                fig2.add_trace(go.Bar(
+                    x=cwsi_data['timestamp'],
+                    y=cwsi_data['value'],
+                    name='CWSI',
+                    marker_color='purple',
+                    opacity=0.7,
+                    yaxis='y2',
+                    width=3600000  # 1 hour in milliseconds
+                ))
+
+        fig2.update_layout(
+            height=300,
+            yaxis=dict(title='Temperature (°C)', side='left'),
+            yaxis2=dict(
+                title='CWSI',
+                overlaying='y',
+                side='right',
+                range=[0, 1]
+            ),
+            legend=dict(orientation='h', yanchor='bottom', y=1.02),
+            margin=dict(l=60, r=60, t=40, b=40)
+        )
+        st.plotly_chart(fig2, use_container_width=True)
+
+        # 3. Soil Moisture, SWSI & Irrigation Graph
+        st.subheader("Soil Moisture & Water Management")
+        fig3 = go.Figure()
+
+        # TDR sensors
+        tdr_columns = diagnostic_info['tdr_sensors']
+        if tdr_columns:
+            for tdr in tdr_columns:
+                parsed = parse_sensor_name(tdr)
+                depth = parsed.get('Depth', 'xx')
+                tdr_data = df[df['variable_name'] == tdr]
+                fig3.add_trace(go.Scatter(
+                    x=tdr_data['timestamp'],
+                    y=tdr_data['value'],
+                    name=f'VWC {depth}cm',
+                    line=dict(width=2)
+                ))
+
+        # SWSI
+        swsi_data = df[df['variable_name'] == 'swsi']
+        if not swsi_data.empty:
+            fig3.add_trace(go.Bar(
+                x=swsi_data['timestamp'],
+                y=swsi_data['value'],
+                name='SWSI',
+                marker_color='brown',
+                opacity=0.7,
+                yaxis='y2',
+                width=3600000  # 1 hour in milliseconds
+            ))
+
+        # Irrigation events
+        if not irrigation_df.empty:
+            fig3.add_trace(go.Bar(
+                x=irrigation_df['date'],
+                y=irrigation_df['amount_inches'],
+                name='Irrigation',
+                marker_color='green',
+                yaxis='y2'
+            ))
+
+        # Rainfall
+        rain_data = df[df['variable_name'] == 'Rain_1m_Tot']
+        if not rain_data.empty:
+            fig3.add_trace(go.Bar(
+                x=rain_data['timestamp'],
+                y=rain_data['value'],
+                name='Rainfall',
+                marker_color='blue',
+                opacity=0.6,
+                yaxis='y2'
+            ))
+
+        fig3.update_layout(
+            height=400,
+            yaxis=dict(title='VWC (%)', side='left'),
+            yaxis2=dict(
+                title='Water Input (inches) / SWSI',
+                overlaying='y',
+                side='right',
+                range=[0, 1]
+            ),
+            legend=dict(orientation='h', yanchor='bottom', y=1.02),
+            margin=dict(l=60, r=60, t=40, b=40)
+        )
+        st.plotly_chart(fig3, use_container_width=True)
 
     # Footer
     st.markdown("---")
-    st.markdown("<p class='footer-text'>© 2024 Crop2Cloud24. All rights reserved.</p>", unsafe_allow_html=True)
+    st.markdown("© 2024 Crop2Cloud Platform")
 
 if __name__ == "__main__":
     main()
