@@ -432,7 +432,7 @@ def create_date_slider():
             "",  # Remove label since we have the markdown header
             options=list(date_to_int.values()),
             value=(0, len(dates)-1),
-            format_func=lambda x: int_to_date[x].strftime('%Y-%m-%d'),
+            format_func=lambda x: "",  # Hide the dates on slider itself
             key="date_slider"
         )
         
@@ -440,9 +440,9 @@ def create_date_slider():
         start_date = int_to_date[selected[0]]
         end_date = int_to_date[selected[1]]
         
-        # Display dates in a single line with spacing
+        # Display dates below with better spacing
         st.markdown(
-            f"<div style='display: flex; justify-content: space-between;'>"
+            f"<div style='display: flex; justify-content: space-between; margin-top: 10px;'>"
             f"<span>Start: {start_date.strftime('%Y-%m-%d')}</span>"
             f"<span>End: {end_date.strftime('%Y-%m-%d')}</span>"
             "</div>",
