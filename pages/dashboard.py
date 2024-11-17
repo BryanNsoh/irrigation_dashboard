@@ -49,6 +49,18 @@ PLOT_STYLE = {
     'opacity': 0.8
 }
 
+# First, define common x-axis settings for all plots
+COMMON_LAYOUT = {
+    'xaxis': dict(
+        domain=[0.1, 0.9],  # Consistent domain for all plots
+        showgrid=True,
+        gridcolor='rgba(128, 128, 128, 0.2)',
+    ),
+    'margin': dict(l=80, r=80, t=40, b=40),  # Consistent margins
+    'showlegend': True,
+    'plot_bgcolor': 'white'
+}
+
 def get_plot_metadata():
     """Get plot metadata including treatment and crop info"""
     query = """
@@ -153,14 +165,10 @@ def create_weather_plot(df_pivot, style=PLOT_STYLE):
 
     # ETC as daily bars centered at noon
     if 'etc' in df_pivot.columns:
-        # Convert timestamp to date for daily aggregation
         df_pivot['date'] = df_pivot['timestamp'].dt.date
         daily_etc = df_pivot.groupby('date')['etc'].sum().reset_index()
-        
-        # Set time to noon for each date
         daily_etc['datetime'] = pd.to_datetime(daily_etc['date']) + pd.Timedelta(hours=12)
         
-        # Constants for bar width
         ONE_DAY_MS = 86400000  # milliseconds in a day
         BAR_WIDTH = ONE_DAY_MS * 0.25  # 25% of day width
         
@@ -173,6 +181,7 @@ def create_weather_plot(df_pivot, style=PLOT_STYLE):
             width=BAR_WIDTH
         ))
 
+    # Add other weather traces
     if 'WndAveSpd_3m' in df_pivot.columns:
         fig.add_trace(go.Scatter(
             x=df_pivot['timestamp'],
@@ -191,27 +200,25 @@ def create_weather_plot(df_pivot, style=PLOT_STYLE):
             yaxis='y4'
         ))
 
-    fig.update_layout(
-        height=300,
-        yaxis=dict(
+    layout = {
+        'height': 300,
+        'yaxis': dict(
             title=None,
             side='left',
             titlefont=dict(size=style['font_size']),
             tickfont=dict(size=style['font_size'], color='gold'),
             showgrid=True,
-            domain=[0, 0.85]
         ),
-        yaxis2=dict(
+        'yaxis2': dict(
             title=None,
             overlaying='y',
             side='left',
             position=0.05,
             titlefont=dict(size=style['font_size']),
             tickfont=dict(size=style['font_size'], color='red'),
-            anchor='free',
-            range=[0, df_pivot['etc'].max() * 1.1] if 'etc' in df_pivot.columns else None  # Add some headroom for bars
+            anchor='free'
         ),
-        yaxis3=dict(
+        'yaxis3': dict(
             title=None,
             overlaying='y',
             side='right',
@@ -220,7 +227,7 @@ def create_weather_plot(df_pivot, style=PLOT_STYLE):
             tickfont=dict(size=style['font_size'], color='blue'),
             anchor='free'
         ),
-        yaxis4=dict(
+        'yaxis4': dict(
             title=None,
             overlaying='y',
             side='right',
@@ -229,18 +236,16 @@ def create_weather_plot(df_pivot, style=PLOT_STYLE):
             tickfont=dict(size=style['font_size'], color='green'),
             anchor='free'
         ),
-        legend=dict(
+        'legend': dict(
             orientation='h',
             yanchor='bottom',
             y=1.02,
             font=dict(size=style['legend_size'])
-        ),
-        margin=dict(l=80, r=80, t=40, b=40),  # Reduced margins
-        showlegend=True,
-        plot_bgcolor='white',
-        xaxis=dict(domain=[0.05, 0.95])  # Expanded plot width
-    )
+        )
+    }
     
+    layout.update(COMMON_LAYOUT)
+    fig.update_layout(**layout)
     return fig
 
 def create_temperature_plot(df, df_pivot, style=PLOT_STYLE):
@@ -286,15 +291,15 @@ def create_temperature_plot(df, df_pivot, style=PLOT_STYLE):
                 width=style['bar_width']
             ))
 
-    fig.update_layout(
-        height=300,
-        yaxis=dict(
+    layout = {
+        'height': 300,
+        'yaxis': dict(
             title='Temperature (°C)',
             side='left',
             titlefont=dict(size=style['font_size']),
             tickfont=dict(size=style['font_size'])
         ),
-        yaxis2=dict(
+        'yaxis2': dict(
             title='CWSI',
             overlaying='y',
             side='right',
@@ -302,22 +307,23 @@ def create_temperature_plot(df, df_pivot, style=PLOT_STYLE):
             titlefont=dict(size=style['font_size'], color='purple'),
             tickfont=dict(size=style['font_size'], color='purple')
         ),
-        legend=dict(
+        'legend': dict(
             orientation='h',
             yanchor='bottom',
             y=1.02,
             font=dict(size=style['legend_size'])
-        ),
-        margin=dict(l=60, r=60, t=40, b=40)
-    )
+        )
+    }
     
+    layout.update(COMMON_LAYOUT)
+    fig.update_layout(**layout)
     return fig
 
 def create_water_management_plot(df, irrigation_df, style=PLOT_STYLE):
     """Create soil moisture and water management plot"""
     fig = go.Figure()
 
-    # TDR sensors - Reduce line width and adjust opacity
+    # TDR sensors
     tdr_columns = [col for col in df['variable_name'].unique() if col.startswith('TDR')]
     colors = px.colors.qualitative.Set2
     if tdr_columns:
@@ -329,96 +335,79 @@ def create_water_management_plot(df, irrigation_df, style=PLOT_STYLE):
                 x=tdr_data['timestamp'],
                 y=tdr_data['value'],
                 name=f'VWC {depth}cm',
-                line=dict(
-                    color=colors[i % len(colors)], 
-                    width=style['line_width'] - 1,  # Slightly thinner lines
-                    dash='solid'  # You could also use 'dot' or 'dash' for some depths
-                ),
-                opacity=0.8,  # Slightly more transparent
+                line=dict(color=colors[i % len(colors)], width=style['line_width']),
                 mode='lines'
             ))
 
-    # SWSI as continuous line - Make it stand out more
+    # SWSI as continuous line
     swsi_data = df[df['variable_name'] == 'swsi']
     if not swsi_data.empty:
         fig.add_trace(go.Scatter(
             x=swsi_data['timestamp'],
             y=swsi_data['value'],
             name='SWSI',
-            line=dict(
-                color='brown', 
-                width=style['line_width'] + 1,  # Slightly thicker
-                dash='solid'
-            ),
-            opacity=1,  # Full opacity
-            mode='lines',
+            line=dict(color='brown', width=style['line_width']),
             yaxis='y2'
         ))
 
-    # Constants for bar widths
-    ONE_DAY_MS = 86400000  # milliseconds in a day
-    RAIN_WIDTH = ONE_DAY_MS * 0.7  # Reduced from 0.98 to 0.7
-    IRR_WIDTH = ONE_DAY_MS * 0.7   # Match rainfall width
-
-    # Rainfall bars - Adjust opacity and width
+    # Rainfall bars
     rain_data = df[df['variable_name'] == 'Rain_1m_Tot'].copy()
     if not rain_data.empty:
         rain_data['date'] = rain_data['timestamp'].dt.date
         daily_rain = rain_data.groupby('date')['value'].sum().reset_index()
-        daily_rain['date'] = pd.to_datetime(daily_rain['date'])
+        daily_rain['datetime'] = pd.to_datetime(daily_rain['date']) + pd.Timedelta(hours=12)
+        
+        ONE_DAY_MS = 86400000
+        BAR_WIDTH = ONE_DAY_MS * 0.25
         
         fig.add_trace(go.Bar(
-            x=daily_rain['date'],
+            x=daily_rain['datetime'],
             y=daily_rain['value'],
             name='Rainfall',
-            marker_color='rgba(0, 0, 255, 0.5)',  # Lighter blue with transparency
+            marker_color='rgba(0, 0, 255, 0.5)',
             yaxis='y2',
-            width=RAIN_WIDTH
+            width=BAR_WIDTH
         ))
 
-    # Irrigation bars - Adjust opacity and width
+    # Irrigation bars
     if not irrigation_df.empty:
+        irrigation_df['datetime'] = pd.to_datetime(irrigation_df['date']) + pd.Timedelta(hours=12)
         fig.add_trace(go.Bar(
-            x=irrigation_df['date'],
+            x=irrigation_df['datetime'],
             y=irrigation_df['amount_inches'],
             name='Irrigation',
-            marker_color='rgba(0, 128, 0, 0.5)',  # Lighter green with transparency
+            marker_color='rgba(0, 128, 0, 0.5)',
             yaxis='y2',
-            width=IRR_WIDTH
+            width=BAR_WIDTH
         ))
 
-    # Update layout with better spacing and grid
-    fig.update_layout(
-        height=400,  # Increased height
-        yaxis=dict(
+    layout = {
+        'height': 400,
+        'yaxis': dict(
             title='VWC (%)',
             side='left',
             titlefont=dict(size=style['font_size']),
             tickfont=dict(size=style['font_size']),
             showgrid=True,
-            gridcolor='rgba(128, 128, 128, 0.2)',  # Light grid
-            zeroline=False
         ),
-        yaxis2=dict(
+        'yaxis2': dict(
             title='Water Input (inches) / SWSI',
             overlaying='y',
             side='right',
             range=[0, 1],
             titlefont=dict(size=style['font_size']),
-            tickfont=dict(size=style['font_size']),
-            showgrid=False
+            tickfont=dict(size=style['font_size'])
         ),
-        plot_bgcolor='white',  # White background
-        legend=dict(
+        'legend': dict(
             orientation='h',
             yanchor='bottom',
             y=1.02,
-            font=dict(size=style['legend_size']),
-            bgcolor='rgba(255, 255, 255, 0.8)'  # Semi-transparent white background
-        ),
-        margin=dict(l=60, r=60, t=40, b=40)
-    )
+            font=dict(size=style['legend_size'])
+        )
+    }
     
+    layout.update(COMMON_LAYOUT)
+    fig.update_layout(**layout)
     return fig
 
 def create_date_slider():
