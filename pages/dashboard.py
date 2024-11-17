@@ -202,6 +202,14 @@ def create_weather_plot(df_pivot, style=PLOT_STYLE):
 
     layout = {
         'height': 300,
+        'title': dict(
+            text='<b>Weather Conditions</b>',
+            x=0.5,
+            y=0.95,
+            xanchor='center',
+            yanchor='top',
+            font=dict(size=14)
+        ),
         'yaxis': dict(
             title=None,
             side='left',
@@ -293,6 +301,14 @@ def create_temperature_plot(df, df_pivot, style=PLOT_STYLE):
 
     layout = {
         'height': 300,
+        'title': dict(
+            text='<b>Canopy Temperature & CWSI</b>',
+            x=0.5,
+            y=0.95,
+            xanchor='center',
+            yanchor='top',
+            font=dict(size=14)
+        ),
         'yaxis': dict(
             title='Temperature (°C)',
             side='left',
@@ -383,6 +399,14 @@ def create_water_management_plot(df, irrigation_df, style=PLOT_STYLE):
 
     layout = {
         'height': 400,
+        'title': dict(
+            text='<b>Soil Moisture & Water Management</b>',
+            x=0.5,
+            y=0.95,
+            xanchor='center',
+            yanchor='top',
+            font=dict(size=14)
+        ),
         'yaxis': dict(
             title='VWC (%)',
             side='left',
