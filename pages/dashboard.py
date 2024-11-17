@@ -142,7 +142,7 @@ def create_weather_plot(df_pivot, style=PLOT_STYLE):
     """Create weather conditions plot"""
     fig = go.Figure()
 
-    # Update trace names to include units
+    # Solar Radiation as line
     fig.add_trace(go.Scatter(
         x=df_pivot['timestamp'],
         y=df_pivot['Solar_2m_Avg'],
@@ -151,13 +151,26 @@ def create_weather_plot(df_pivot, style=PLOT_STYLE):
         yaxis='y'
     ))
 
+    # ETC as daily bars centered at noon
     if 'etc' in df_pivot.columns:
-        fig.add_trace(go.Scatter(
-            x=df_pivot['timestamp'],
-            y=df_pivot['etc'],
+        # Convert timestamp to date for daily aggregation
+        df_pivot['date'] = df_pivot['timestamp'].dt.date
+        daily_etc = df_pivot.groupby('date')['etc'].sum().reset_index()
+        
+        # Set time to noon for each date
+        daily_etc['datetime'] = pd.to_datetime(daily_etc['date']) + pd.Timedelta(hours=12)
+        
+        # Constants for bar width
+        ONE_DAY_MS = 86400000  # milliseconds in a day
+        BAR_WIDTH = ONE_DAY_MS * 0.25  # 25% of day width
+        
+        fig.add_trace(go.Bar(
+            x=daily_etc['datetime'],
+            y=daily_etc['etc'],
             name='ETC (mm)',
-            line=dict(color='red', width=style['line_width']),
-            yaxis='y2'
+            marker_color='rgba(255, 0, 0, 0.5)',
+            yaxis='y2',
+            width=BAR_WIDTH
         ))
 
     if 'WndAveSpd_3m' in df_pivot.columns:
@@ -195,7 +208,8 @@ def create_weather_plot(df_pivot, style=PLOT_STYLE):
             position=0.05,
             titlefont=dict(size=style['font_size']),
             tickfont=dict(size=style['font_size'], color='red'),
-            anchor='free'
+            anchor='free',
+            range=[0, df_pivot['etc'].max() * 1.1] if 'etc' in df_pivot.columns else None  # Add some headroom for bars
         ),
         yaxis3=dict(
             title=None,
@@ -425,11 +439,12 @@ def create_date_slider():
     cols = st.columns([1, 3, 1])
     with cols[1]:
         selected = st.select_slider(
-            "",  # Remove label since we have the markdown header
+            label="Date Range",  # Added label
             options=list(date_to_int.values()),
             value=(0, len(dates)-1),
             format_func=lambda x: "",  # Hide the dates on slider itself
-            key="date_slider"
+            key="date_slider",
+            label_visibility="collapsed"  # Hide the label but keep it for accessibility
         )
         
         # Display selected dates separately below slider
@@ -454,7 +469,7 @@ def main():
         initial_sidebar_state="collapsed"
     )
 
-    st.title("🌾 **CROP2CLOUD Platform** ����")
+    st.title("🌾 **CROP2CLOUD Platform** ")
 
     # Get plot metadata
     plot_metadata = get_plot_metadata()
