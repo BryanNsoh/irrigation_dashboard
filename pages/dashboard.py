@@ -185,34 +185,39 @@ def create_weather_plot(df_pivot, style=PLOT_STYLE):
     fig.update_layout(
         height=300,
         yaxis=dict(
-            title='Solar Radiation (W/m²)',
+            title=None,
             side='left',
             titlefont=dict(size=style['font_size']),
-            tickfont=dict(size=style['font_size'])
+            tickfont=dict(size=style['font_size'], color='gold'),
+            showgrid=True,
+            domain=[0, 0.85]
         ),
         yaxis2=dict(
-            title='ETC (mm)',
+            title=None,
             overlaying='y',
-            side='right',
-            position=0.85,
-            titlefont=dict(size=style['font_size'], color='red'),
-            tickfont=dict(size=style['font_size'], color='red')
+            side='left',
+            position=0.05,
+            titlefont=dict(size=style['font_size']),
+            tickfont=dict(size=style['font_size'], color='red'),
+            anchor='free'
         ),
         yaxis3=dict(
-            title='Wind Speed (m/s)',
+            title=None,
             overlaying='y',
             side='right',
             position=0.95,
-            titlefont=dict(size=style['font_size'], color='blue'),
-            tickfont=dict(size=style['font_size'], color='blue')
+            titlefont=dict(size=style['font_size']),
+            tickfont=dict(size=style['font_size'], color='blue'),
+            anchor='free'
         ),
         yaxis4=dict(
-            title='RH (%)',
+            title=None,
             overlaying='y',
             side='right',
-            position=0.90,
-            titlefont=dict(size=style['font_size'], color='green'),
-            tickfont=dict(size=style['font_size'], color='green')
+            position=1.0,
+            titlefont=dict(size=style['font_size']),
+            tickfont=dict(size=style['font_size'], color='green'),
+            anchor='free'
         ),
         legend=dict(
             orientation='h',
@@ -220,7 +225,10 @@ def create_weather_plot(df_pivot, style=PLOT_STYLE):
             y=1.02,
             font=dict(size=style['legend_size'])
         ),
-        margin=dict(l=60, r=60, t=40, b=40)
+        margin=dict(l=100, r=100, t=40, b=40),
+        showlegend=True,
+        plot_bgcolor='white',
+        xaxis=dict(domain=[0.1, 0.9])
     )
     
     return fig
@@ -299,7 +307,7 @@ def create_water_management_plot(df, irrigation_df, style=PLOT_STYLE):
     """Create soil moisture and water management plot"""
     fig = go.Figure()
 
-    # TDR sensors
+    # TDR sensors - Reduce line width and adjust opacity
     tdr_columns = [col for col in df['variable_name'].unique() if col.startswith('TDR')]
     colors = px.colors.qualitative.Set2
     if tdr_columns:
@@ -311,29 +319,38 @@ def create_water_management_plot(df, irrigation_df, style=PLOT_STYLE):
                 x=tdr_data['timestamp'],
                 y=tdr_data['value'],
                 name=f'VWC {depth}cm',
-                line=dict(color=colors[i % len(colors)], width=style['line_width']),
+                line=dict(
+                    color=colors[i % len(colors)], 
+                    width=style['line_width'] - 1,  # Slightly thinner lines
+                    dash='solid'  # You could also use 'dot' or 'dash' for some depths
+                ),
+                opacity=0.8,  # Slightly more transparent
                 mode='lines'
             ))
 
-    # SWSI as continuous line
+    # SWSI as continuous line - Make it stand out more
     swsi_data = df[df['variable_name'] == 'swsi']
     if not swsi_data.empty:
         fig.add_trace(go.Scatter(
             x=swsi_data['timestamp'],
             y=swsi_data['value'],
             name='SWSI',
-            line=dict(color='brown', width=style['line_width']),
+            line=dict(
+                color='brown', 
+                width=style['line_width'] + 1,  # Slightly thicker
+                dash='solid'
+            ),
+            opacity=1,  # Full opacity
             mode='lines',
             yaxis='y2'
         ))
 
-    # Constants for bar widths and offsets
+    # Constants for bar widths
     ONE_DAY_MS = 86400000  # milliseconds in a day
-    RAIN_WIDTH = ONE_DAY_MS * 0.98  # 98% of day width
-    IRR_WIDTH = ONE_DAY_MS * 0.98   # Changed to match rainfall width
-    IRR_OFFSET = 0                   # Removed offset since we want full day span
+    RAIN_WIDTH = ONE_DAY_MS * 0.7  # Reduced from 0.98 to 0.7
+    IRR_WIDTH = ONE_DAY_MS * 0.7   # Match rainfall width
 
-    # Rainfall bars
+    # Rainfall bars - Adjust opacity and width
     rain_data = df[df['variable_name'] == 'Rain_1m_Tot'].copy()
     if not rain_data.empty:
         rain_data['date'] = rain_data['timestamp'].dt.date
@@ -344,31 +361,33 @@ def create_water_management_plot(df, irrigation_df, style=PLOT_STYLE):
             x=daily_rain['date'],
             y=daily_rain['value'],
             name='Rainfall',
-            marker_color='blue',
-            opacity=style['opacity'],
+            marker_color='rgba(0, 0, 255, 0.5)',  # Lighter blue with transparency
             yaxis='y2',
             width=RAIN_WIDTH
         ))
 
-    # Irrigation bars - now full width
+    # Irrigation bars - Adjust opacity and width
     if not irrigation_df.empty:
         fig.add_trace(go.Bar(
-            x=irrigation_df['date'],  # Removed offset
+            x=irrigation_df['date'],
             y=irrigation_df['amount_inches'],
             name='Irrigation',
-            marker_color='green',
-            opacity=style['opacity'],
+            marker_color='rgba(0, 128, 0, 0.5)',  # Lighter green with transparency
             yaxis='y2',
             width=IRR_WIDTH
         ))
 
+    # Update layout with better spacing and grid
     fig.update_layout(
-        height=300,
+        height=400,  # Increased height
         yaxis=dict(
             title='VWC (%)',
             side='left',
             titlefont=dict(size=style['font_size']),
-            tickfont=dict(size=style['font_size'])
+            tickfont=dict(size=style['font_size']),
+            showgrid=True,
+            gridcolor='rgba(128, 128, 128, 0.2)',  # Light grid
+            zeroline=False
         ),
         yaxis2=dict(
             title='Water Input (inches) / SWSI',
@@ -376,13 +395,16 @@ def create_water_management_plot(df, irrigation_df, style=PLOT_STYLE):
             side='right',
             range=[0, 1],
             titlefont=dict(size=style['font_size']),
-            tickfont=dict(size=style['font_size'])
+            tickfont=dict(size=style['font_size']),
+            showgrid=False
         ),
+        plot_bgcolor='white',  # White background
         legend=dict(
             orientation='h',
             yanchor='bottom',
             y=1.02,
-            font=dict(size=style['legend_size'])
+            font=dict(size=style['legend_size']),
+            bgcolor='rgba(255, 255, 255, 0.8)'  # Semi-transparent white background
         ),
         margin=dict(l=60, r=60, t=40, b=40)
     )
@@ -402,17 +424,32 @@ def create_date_slider():
     date_to_int = {date: i for i, date in enumerate(dates)}
     int_to_date = {i: date for date, i in date_to_int.items()}
     
-    # Create slider
+    # Create slider with better formatting
+    st.markdown("### Select Date Range")
     cols = st.columns([1, 3, 1])
     with cols[1]:
         selected = st.select_slider(
-            "Select Date Range",
+            "",  # Remove label since we have the markdown header
             options=list(date_to_int.values()),
             value=(0, len(dates)-1),
-            format_func=lambda x: int_to_date[x].strftime('%Y-%m-%d')
+            format_func=lambda x: int_to_date[x].strftime('%Y-%m-%d'),
+            key="date_slider"
+        )
+        
+        # Display selected dates separately below slider
+        start_date = int_to_date[selected[0]]
+        end_date = int_to_date[selected[1]]
+        
+        # Display dates in a single line with spacing
+        st.markdown(
+            f"<div style='display: flex; justify-content: space-between;'>"
+            f"<span>Start: {start_date.strftime('%Y-%m-%d')}</span>"
+            f"<span>End: {end_date.strftime('%Y-%m-%d')}</span>"
+            "</div>",
+            unsafe_allow_html=True
         )
     
-    return int_to_date[selected[0]], int_to_date[selected[1]]
+    return start_date, end_date
 
 def main():
     st.set_page_config(
