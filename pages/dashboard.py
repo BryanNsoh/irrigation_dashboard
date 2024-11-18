@@ -207,7 +207,7 @@ def create_weather_plot(df_pivot, style=PLOT_STYLE):
         'title': dict(
             text='<b>Weather Conditions</b>',
             x=0.5,
-            y=0.95,
+            y=0.99,
             xanchor='center',
             yanchor='top',
             font=dict(size=style['title_size'])
@@ -249,7 +249,9 @@ def create_weather_plot(df_pivot, style=PLOT_STYLE):
         'legend': dict(
             orientation='h',
             yanchor='bottom',
-            y=1.02,
+            y=1.15,
+            xanchor='center',
+            x=0.5,
             font=dict(size=style['legend_size'])
         )
     }
@@ -306,7 +308,7 @@ def create_temperature_plot(df, df_pivot, style=PLOT_STYLE):
         'title': dict(
             text='<b>Canopy Temperature & CWSI</b>',
             x=0.5,
-            y=0.95,
+            y=0.99,
             xanchor='center',
             yanchor='top',
             font=dict(size=style['title_size'])
@@ -328,7 +330,9 @@ def create_temperature_plot(df, df_pivot, style=PLOT_STYLE):
         'legend': dict(
             orientation='h',
             yanchor='bottom',
-            y=1.02,
+            y=1.15,
+            xanchor='center',
+            x=0.5,
             font=dict(size=style['legend_size'])
         )
     }
@@ -341,18 +345,20 @@ def create_water_management_plot(df, irrigation_df, style=PLOT_STYLE):
     """Create soil moisture and water management plot"""
     fig = go.Figure()
 
-    # TDR sensors
+    # TDR sensors - updated legend names only
     tdr_columns = [col for col in df['variable_name'].unique() if col.startswith('TDR')]
     colors = px.colors.qualitative.Set2
     if tdr_columns:
         for i, tdr in enumerate(tdr_columns):
             parsed = parse_sensor_name(tdr)
             depth = parsed.get('Depth', 'xx')
+            # Convert depth to inches in legend name only
+            legend_depth = f"{depth}in" if depth in ['06', '18', '30'] else depth
             tdr_data = df[df['variable_name'] == tdr]
             fig.add_trace(go.Scatter(
                 x=tdr_data['timestamp'],
                 y=tdr_data['value'],
-                name=f'VWC {depth}cm',
+                name=f'VWC {legend_depth}',  # Updated legend name
                 line=dict(color=colors[i % len(colors)], width=style['line_width']),
                 mode='lines'
             ))
@@ -404,7 +410,7 @@ def create_water_management_plot(df, irrigation_df, style=PLOT_STYLE):
         'title': dict(
             text='<b>Soil Moisture & Water Management</b>',
             x=0.5,
-            y=0.95,
+            y=0.99,
             xanchor='center',
             yanchor='top',
             font=dict(size=style['title_size'])
@@ -427,7 +433,9 @@ def create_water_management_plot(df, irrigation_df, style=PLOT_STYLE):
         'legend': dict(
             orientation='h',
             yanchor='bottom',
-            y=1.02,
+            y=1.15,
+            xanchor='center',
+            x=0.5,
             font=dict(size=style['legend_size'])
         )
     }
